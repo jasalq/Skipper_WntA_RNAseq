@@ -1,1 +1,41 @@
 # Skipper_WntA
+## Pipeline Outline 
+1. [RNAseq Quality Assessment](#assessment-of-rna-sequencing-quality-using-fastqc) 
+2. [Adapter Trimming](#adapter-trimming-using-fastp)
+
+### Tools Used 
+
+## Assessment of RNA Sequencing Quality using FastQC
+Quality of RNA sequencing was accessed using FastQC
+```
+#!/bin/sh
+#SBATCH -J SSS_wing_RNAseq_fastqc
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=j.alqassar@gwu.edu
+#SBATCH -o SSS_wing_RNAseq_fastqc.out #redirecting stdout
+#SBATCH -p defq #queue 
+#SBATCH -N 1 #amount of nodes 
+#SBATCH -n 16 #amount of cores 
+#SBATCH -t 24:00:00
+
+
+echo "=========================================================="
+echo "Running on node : $HOSTNAME"
+echo "Current directory : $PWD"
+echo "Current job ID : $SLURM_JOB_ID"
+echo "=========================================================="
+
+cd /scratch/martinlab/jasmine/Skipper_data
+
+module load jdk/21.0.1
+module load fastQC/0.11.8
+
+mkdir /scratch/martinlab/jasmine/Skipper_data/fastqc_output
+
+for i in *fastq.gz; do
+        fastqc -f fastq -t 24 -o /scratch/martinlab/jasmine/Skipper_data/fastqc_output $i;
+        done
+```
+## Adapter Trimming using Fastp
+Trim the adapters and polyG tails with Fastp
+```
