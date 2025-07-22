@@ -49,3 +49,4 @@ datasets download genome accession GCF_041222505.1 --include gtf,rna,cds,protein
 unzip ncbi_dataset
 mv /scratch/martinlab/jasmine/skipper_diff_exp/ncbi_skipper_genome/ncbi_dataset/data/GCF_041222505.1 ../../
 ```
+**In addition download the list of all annotated genes by clicking "view annotated genes" on the genome release page selecting all and hit download table while clicking "one sequence per gene" option**
