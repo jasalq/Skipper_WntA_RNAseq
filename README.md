@@ -2,6 +2,7 @@
 ## Pipeline Outline 
 1. [RNAseq Quality Assessment](#assessment-of-rna-sequencing-quality-using-fastqc) 
 2. [Adapter Trimming](#adapter-trimming-using-fastp)
+3. [Read Mapping to the Reference Genome]
 
 ### Tools Used 
 
@@ -38,4 +39,13 @@ for i in *fastq.gz; do
 ```
 ## Adapter Trimming using Fastp
 Trim the adapters and polyG tails with Fastp
+
+## Read Mapping
+
+**Download <em>E. clarus</em> RefSeq genome and annotation from NCBI using NCBI Datasets tool** 
+```
+mamba activate ncbi_datsets
+datasets download genome accession GCF_041222505.1 --include gtf,rna,cds,protein,genome,seq-report
+unzip ncbi_dataset
+mv /scratch/martinlab/jasmine/skipper_diff_exp/ncbi_skipper_genome/ncbi_dataset/data/GCF_041222505.1 ../../
 ```
