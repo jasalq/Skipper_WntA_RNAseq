@@ -59,7 +59,7 @@ I manually edited the GeneID column to have a LOC prefix
 ``
 cd db
 module load blast+/2.16.0+
-makeblastdb -in dmel-all-translation-r6.64.fasta -dbtype prot
+makeblastdb -in dmelAA -input_type fasta -dbtype prot -title dmelAA
 ```
 **Now run BLASTp on the HPC** 
 ```
@@ -82,7 +82,7 @@ echo "=========================================================="
 
 module load blast+/2.16.0+
 
-DB=/scratch/martinlab/jasmine/skipper_diff_exp/get_flybase_names/db
+DB=/gpfs/automountdir/gpfs/scratch/martinlab/jasmine/skipper_diff_exp/get_flybase_names/db/dmelAA
 QUERY=/scratch/martinlab/jasmine/skipper_diff_exp/get_flybase_names/Ecla_GCF_041222505.1_protein.faa
 PREFIX=all_Ecla_proteins_for_flybase
 
