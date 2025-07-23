@@ -64,9 +64,9 @@ I manually edited the GeneID column to have a LOC prefix
 #SBATCH --mail-type=END
 #SBATCH --mail-user=j.alqassar@gwu.edu
 #SBATCH -o flybase_blastp_Ecla_genome.out #redirecting stdout
-#SBATCH -p tiny #queue 
+#SBATCH -p nano #queue 
 #SBATCH -n 40 #amount of cores 
-#SBATCH -t 04:00:00
+#SBATCH -t 00:30:00
 
 echo "=========================================================="
 echo "Running on node : $HOSTNAME"
