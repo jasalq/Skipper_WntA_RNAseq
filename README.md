@@ -98,3 +98,6 @@ echo "Job Finished  $SLURM_JOB_ID:"
 date
 echo "=========================================================="
 ```
+
+
+# when you do star mapping try counting by gene_id field (really symbol in the annotation table) in the GTF so that it collapses different XM splice isoforms by loci using the option --sjdbGTFtagExonParentTranscript gene_id
