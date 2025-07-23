@@ -56,7 +56,12 @@ I manually edited the GeneID column to have a LOC prefix
 **use the protein.faa file from the NCBI download to blast to flybase**
 **find this file -> dmel-all-translation.fasta from the latest FlyBase release and unzip**
 (Latest FlyBase Dmel genome release was July 17 2025)
-
+Make blastdb from Flybase Fasta
+``
+cd db
+module load blast+/2.16.0+
+makeblastdb -in dmel-all-translation-r6.64.fasta -dbtype prot
+```
 **Now run BLASTp on the HPC** 
 ```
 #!/bin/sh
