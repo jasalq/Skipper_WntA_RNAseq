@@ -158,6 +158,54 @@ Ecla_annotation_table  <- Ecla_annotation_table %>%
 
 write.table(Ecla_annotation_table, file="Ecla_annotation_table_with_flybase_names.tsv", quote=F, sep="\t",row.names=FALSE, na="")
 
- 
+##STAR MAPPING
+mamba activate star_2.7.11b_JDA 
+
+```
+## STAR Mapping of RNAseq data to the <em>Plodia</em> reference genome (GCF_027563975.2)
+
+**Download <em>Plodia</em> RefSeq genome from NCBI using NCBI Datasets tool** 
+```
+mamba activate NCBI_datsets
+datasets download genome accession GCF_027563975.2 
+unzip ncbi_dataset
+mv ncbi_dataset/data/GCF_027563975.2/GCF_027563975.2_ilPloInte3.2_genomic.fna ../../../
+```
+**Create a STAR genome index for the <em>E. clarus</em> genome**  
+Prior to running, to determine the correct value for --genomeSAindexNbases I used the formula provided where the genome is 451.8 Mb: min(14, log2(451,800,000) / 2 - 1).
+
+Also activate mamba enviroment with STAR installed before submitting 
+```
+mamba activate star_2.7.11b_JDA
+```
+
+```
+#!/bin/sh
+#SBATCH -J skipper_genome_index
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=j.alqassar@gwu.edu
+#SBATCH -o skipper_genome_index.out #redirecting stdout
+#SBATCH -p nano #queue 
+#SBATCH -N 1 #amount of nodes 
+#SBATCH -n 40 #amount of cores 
+#SBATCH -t 0:30:00
+
+echo "=========================================================="
+echo "Running on node : $HOSTNAME"
+echo "Current directory : $PWD"
+echo "Current job ID : $SLURM_JOB_ID"
+echo "=========================================================="
+
+
+cd /scratch/martinlab/jasmine/skipper_diff_exp/star_runs
+
+CORES=40
+GENOME_DIR=/scratch/martinlab/jasmine/skipper_diff_exp/star_runs/skipper_genome_index
+GENOME=/scratch/martinlab/jasmine/skipper_diff_exp/ncbi_skipper_genome/GCF_041222505.1/GCF_041222505.1_WU_Ecla_fem_2.2_genomic.fna
+ANNOTATION=/scratch/martinlab/jasmine/skipper_diff_exp/GCF_041222505.1_WU_Ecla_fem_2.2_genomic_cortexedited.gtf
+
+mkdir $GENOME_DIR
+STAR --runMode genomeGenerate --runThreadN $CORES --genomeDir $GENOME_DIR --genomeFastaFiles $GENOME --sjdbGTFfile $ANNOTATION --sjdbOverhang 149 --genomeSAindexNbases 14
+```
 
 # when you do star mapping try counting by gene_id field (really symbol in the annotation table) in the GTF so that it collapses different XM splice isoforms by loci using the option --sjdbGTFtagExonParentTranscript gene_id
