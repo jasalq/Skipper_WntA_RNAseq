@@ -98,6 +98,66 @@ echo "Job Finished  $SLURM_JOB_ID:"
 date
 echo "=========================================================="
 ```
+**Now back to RStudio to add the results to your data matrix**	 
 
+# Set working directory
+setwd("/Users/jasminealqassar/Library/CloudStorage/GoogleDrive-j.alqassar@gwmail.gwu.edu/.shortcut-targets-by-id/1Hi7WIp_ha7vnyQUclvt-AJRl6AF8y1hj/Martin Lab/@LabData/2025_Skipper_WntA/SSS_Differential_Expression/R_working_dir")
+
+# Install necessary packages
+install.packages("tidyverse"); install.packages("stringr"); install.packages("dplyr"); install.packages("DESeq2")
+
+# Load necessary packages
+library(tidyverse); library(stringr); library(dplyr); library(DESeq2); library(ggplot2); library(readxl)
+
+# Read in the results
+flybase_results <- read_tsv("all_Ecla_proteins_for_flybase.out", col_names=FALSE)
+
+#Download and read in the following tables from the latest [FlyBase genome release GUI page ](#https://flybase.org/downloads/bulkdata) and clean up column names before reading in
+  flybase_prot_to_Symbol <- read_tsv("dmel_unique_protein_isoforms_fb_2025_02.tsv", col_names=TRUE, comment="#")
+  flybase_gn_to_bpp <- read_tsv("fbgn_fbtr_fbpp_expanded_fb_2025_02.tsv", col_names=TRUE, comment="#") 
+  flybase_gn_summary <- read_tsv("automated_gene_summaries_fb_2025_02.tsv", col_names=TRUE, comment="#") 
+  
+  
+  flybase_prot_to_Symbol<- flybase_prot_to_Symbol %>%
+    select(FBgn, FB_gene_symbol) %>%
+    distinct(FBgn, .keep_all = TRUE) %>%
+    left_join(flybase_gn_summary, by = c("FBgn" = "FBgn"))
+  
+  flybase_gn_to_bpp <- flybase_gn_to_bpp %>%
+    select(gene_ID, gene_fullname, polypeptide_ID) %>%
+    distinct(polypeptide_ID, .keep_all = TRUE) %>%
+    rename("gene_ID" = "FlyBase_FBgn") %>%
+    drop_na()
+  
+  flybase_results <- flybase_results %>%
+    select(X1,X2,X11)
+  
+  colnames(flybase_results)  <- c("Protein", "Flybase_prot", "Eval")
+  
+Geneid_XP <- read_excel("Ecla_gene_annotation_table_orig.xlsx") #gene annotation list 
+  Geneid_XP <- Geneid_XP %>%
+    select('Geneid', 'Protein accession') %>%
+    drop_na()
+  
+  flybase_results <- flybase_results %>%
+    left_join(Geneid_XP, by = c("Protein" = "Protein accession")) %>%
+    relocate("Geneid", .after = "Protein") %>%
+    group_by(Geneid) %>%
+    slice_min(order_by = .data$Eval, with_ties = FALSE) %>%
+    ungroup() %>%
+    left_join(flybase_gn_to_bpp, by = c("Flybase_prot" = "polypeptide_ID")) %>%
+    left_join(flybase_prot_to_Symbol, by = c("FlyBase_FBgn" = "FBgn")) 
+  
+  flybase_results_clean <- flybase_results %>%
+    select(-Protein)
+  
+Ecla_annotation_table <- read_excel("Ecla_gene_annotation_table_orig.xlsx", col_names=TRUE) 
+
+Ecla_annotation_table  <- Ecla_annotation_table %>%
+  left_join(flybase_results_clean, by = c("Geneid" = "Geneid"))
+
+write.table(Ecla_annotation_table, file="Ecla_annotation_table_with_flybase_names.tsv", quote=F, sep="\t",row.names=FALSE, na="")
+
+ 
 
 # when you do star mapping try counting by gene_id field (really symbol in the annotation table) in the GTF so that it collapses different XM splice isoforms by loci using the option --sjdbGTFtagExonParentTranscript gene_id
