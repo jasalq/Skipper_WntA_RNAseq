@@ -208,4 +208,9 @@ mkdir $GENOME_DIR
 STAR --runMode genomeGenerate --runThreadN $CORES --genomeDir $GENOME_DIR --genomeFastaFiles $GENOME --sjdbGTFfile $ANNOTATION --sjdbOverhang 149 --genomeSAindexNbases 14
 ```
 
+
+Before mapping I renamed files using this
+```
+while read -r old new; do   for f in *"$old"*; do     [ -e "$f" ] || continue;      newname="${f//$old/$new}";      mv -- "$f" "$newname";     echo "Renamed: $f -> $newname";   done; done < file_names.txt
+```
 # when you do star mapping try counting by gene_id field (really symbol in the annotation table) in the GTF so that it collapses different XM splice isoforms by loci using the option --sjdbGTFtagExonParentTranscript gene_id
