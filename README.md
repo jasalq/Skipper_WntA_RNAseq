@@ -214,3 +214,194 @@ Before mapping I renamed files using this
 while read -r old new; do   for f in *"$old"*; do     [ -e "$f" ] || continue;      newname="${f//$old/$new}";      mv -- "$f" "$newname";     echo "Renamed: $f -> $newname";   done; done < file_names.txt
 ```
 # when you do star mapping try counting by gene_id field (really symbol in the annotation table) in the GTF so that it collapses different XM splice isoforms by loci using the option --sjdbGTFtagExonParentTranscript gene_id
+```
+#!/bin/sh
+#SBATCH -J skipper_rnaseq_star_pass_1_se
+#SBATCH --mail-type=END
+#SBATCH --mail-user=j.alqassar@gwu.edu
+#SBATCH -o star_pass_1_%A_%a.out #redirecting stdout
+#SBATCH -p nano #queue 
+#SBATCH -n 40 #amount of cores 
+#SBATCH -t 0:30:00
+#SBATCH --array=0-31%10
+
+echo "=========================================================="
+echo "Running on node : $HOSTNAME"
+echo "Current directory : $PWD"
+echo "Current job ID : $SLURM_JOB_ID"
+echo "Job Started:"
+date
+echo "=========================================================="
+
+ulimit -n 10000
+
+PREFIX=/scratch/martinlab/jasmine/skipper_diff_exp/star_runs
+names=($(cat ${PREFIX}/samples))
+echo ${names[${SLURM_ARRAY_TASK_ID}]} 
+
+CORES=40
+GENOME_DIR=/scratch/martinlab/jasmine/skipper_diff_exp/star_runs/skipper_genome_index
+GENOME=/scratch/martinlab/jasmine/skipper_diff_exp/ncbi_skipper_genome/GCF_041222505.1/GCF_041222505.1_WU_Ecla_fem_2.2_genomic.fna
+ANNOTATION=/scratch/martinlab/jasmine/skipper_diff_exp/GCF_041222505.1_WU_Ecla_fem_2.2_genomic_cortexedited.gtf
+RNAseq_FILES_PATH=/scratch/martinlab/jasmine/skipper_diff_exp/skipper_data_renamed/single_end
+OUT_DIR=/scratch/martinlab/jasmine/skipper_diff_exp/star_runs/star_pass1
+
+cd ${OUT_DIR}
+
+STAR --runMode alignReads --runThreadN $CORES --genomeDir $GENOME_DIR --outSAMtype BAM SortedByCoordinate \
+        --outFileNamePrefix ${OUT_DIR}/${names[${SLURM_ARRAY_TASK_ID}]} --readFilesCommand zcat \
+        --sjdbGTFfile $ANNOTATION --limitBAMsortRAM 60000000000 \
+        --sjdbOverhang 79 --outSAMstrandField intronMotif --alignSoftClipAtReferenceEnds No --sjdbGTFtagExonParentTranscript gene_id \
+        --readFilesIn ${RNAseq_FILES_PATH}/${names[${SLURM_ARRAY_TASK_ID}]}_se_R1.fastq.gz
+      
+echo "=========================================================="
+echo "Job Finished  $SLURM_JOB_ID:"
+date
+echo "=========================================================="
+```
+
+
+for i in star_pass_1*.out; do
+	line8=$(sed -n '8p' ${i})
+	mv ${i} "star_pass_1_${line8}.out";
+	done
+
+Now do Pass 2
+
+```
+#!/bin/sh
+#SBATCH -J skipper_rnaseq_star_pass_2_pe
+#SBATCH --mail-type=END
+#SBATCH --mail-user=j.alqassar@gwu.edu
+#SBATCH -o star_pass_2_%A_%a.out #redirecting stdout
+#SBATCH -p nano #queue 
+#SBATCH -n 40 #amount of cores 
+#SBATCH -t 0:30:00
+#SBATCH --array=0-17%5
+
+echo "=========================================================="
+echo "Running on node : $HOSTNAME"
+echo "Current directory : $PWD"
+echo "Current job ID : $SLURM_JOB_ID"
+echo "Job Started:"
+date
+echo "=========================================================="
+
+ulimit -n 10000
+
+PREFIX=/scratch/martinlab/jasmine/skipper_diff_exp/star_runs
+names=($(cat ${PREFIX}/pe_samples))
+echo ${names[${SLURM_ARRAY_TASK_ID}]} 
+
+CORES=40
+GENOME_DIR=/scratch/martinlab/jasmine/skipper_diff_exp/star_runs/skipper_genome_index_for_paired_end
+GENOME=/scratch/martinlab/jasmine/skipper_diff_exp/ncbi_skipper_genome/GCF_041222505.1/GCF_041222505.1_WU_Ecla_fem_2.2_genomic.fna
+ANNOTATION=/scratch/martinlab/jasmine/skipper_diff_exp/GCF_041222505.1_WU_Ecla_fem_2.2_genomic_cortexedited.gtf
+RNAseq_FILES_PATH=/scratch/martinlab/jasmine/skipper_diff_exp/skipper_data_renamed/paired_end
+OUT_DIR=/scratch/martinlab/jasmine/skipper_diff_exp/star_runs/star_pass2
+PASS1_DIR=/scratch/martinlab/jasmine/skipper_diff_exp/star_runs/star_pass1
+
+cd ${OUT_DIR}
+
+STAR --runMode alignReads --runThreadN $CORES --genomeDir $GENOME_DIR --outSAMtype BAM SortedByCoordinate \
+        --outFileNamePrefix ${OUT_DIR}/${names[${SLURM_ARRAY_TASK_ID}]}_pass2_mapped --readFilesCommand zcat \
+        --sjdbGTFfile $ANNOTATION --limitBAMsortRAM 60000000000 \
+        --sjdbOverhang 149 --outSAMstrandField intronMotif --alignSoftClipAtReferenceEnds No --sjdbGTFtagExonParentTranscript gene_id \
+        --outReadsUnmapped Fastx \
+        --quantMode GeneCounts \
+        --sjdbFileChrStartEnd ${PASS1_DIR}/${names[${SLURM_ARRAY_TASK_ID}]}_STARgenome/sjdbList.out.tab \
+        --readFilesIn ${RNAseq_FILES_PATH}/${names[${SLURM_ARRAY_TASK_ID}]}_pe_R1.fastq.gz ${RNAseq_FILES_PATH}/${names[${SLURM_ARRAY_TASK_ID}]}_pe_R2.fastq.gz      
+
+echo "=========================================================="
+echo "Job Finished  $SLURM_JOB_ID:"
+date
+echo "=========================================================="
+```
+Rename the log files 
+```
+for i in star_pass_2*.out; do
+	line8=$(sed -n '8p' ${i})
+	mv ${i} "star_pass_2_${line8}.out";
+	done
+```
+
+
+mamba activate subread_2.0.8_JDA
+
+
+
+move all the single end and paired end samples to seperate directories because you will have to count them seperately
+
+mkdir se_bams 
+
+while read -r prefix; do
+  mv "${prefix}"*.bam se_bams/
+done < /scratch/martinlab/jasmine/skipper_diff_exp/star_runs/se_samples
+
+
+mkdir pe_bams 
+
+while read -r prefix; do
+  mv "${prefix}"*.bam pe_bams/
+done < /scratch/martinlab/jasmine/skipper_diff_exp/star_runs/pe_samples
+
+
+#paired end files counting 
+#!/bin/sh
+#SBATCH -J skipper_rnaseq_counts_pe
+#SBATCH --mail-type=END
+#SBATCH --mail-user=j.alqassar@gwu.edu
+#SBATCH -o counts_pe.out #redirecting stdout
+#SBATCH -p nano #queue 
+#SBATCH -n 40 #amount of cores 
+#SBATCH -t 0:30:00
+
+echo "=========================================================="
+echo "Running on node : $HOSTNAME"
+echo "Current directory : $PWD"
+echo "Current job ID : $SLURM_JOB_ID"
+echo "Job Started:"
+date
+echo "=========================================================="
+
+ANNOTATION=/scratch/martinlab/jasmine/skipper_diff_exp/GCF_041222505.1_WU_Ecla_fem_2.2_genomic_cortexedited.gtf
+OUT=skipper_rnaseq_pe.featurecounts.txt
+BAM_FILES=/scratch/martinlab/jasmine/skipper_diff_exp/star_runs/star_pass2/pe_bams
+CORES=40
+
+featureCounts -a $ANNOTATION -o $OUT  -T $CORES -p --primary -t exon -g gene_id ${BAM_FILES}/*.bam
+
+echo "=========================================================="
+echo "Job Finished  $SLURM_JOB_ID:"
+date
+echo "=========================================================="
+
+# single end files counting
+#!/bin/sh
+#SBATCH -J skipper_rnaseq_counts_se
+#SBATCH --mail-type=END
+#SBATCH --mail-user=j.alqassar@gwu.edu
+#SBATCH -o counts_se.out #redirecting stdout
+#SBATCH -p nano #queue 
+#SBATCH -n 40 #amount of cores 
+#SBATCH -t 0:30:00
+
+echo "=========================================================="
+echo "Running on node : $HOSTNAME"
+echo "Current directory : $PWD"
+echo "Current job ID : $SLURM_JOB_ID"
+echo "Job Started:"
+date
+echo "=========================================================="
+
+ANNOTATION=/scratch/martinlab/jasmine/skipper_diff_exp/GCF_041222505.1_WU_Ecla_fem_2.2_genomic_cortexedited.gtf
+OUT=skipper_rnaseq_se.featurecounts.txt
+BAM_FILES=/scratch/martinlab/jasmine/skipper_diff_exp/star_runs/star_pass2/se_bams
+CORES=40
+
+featureCounts -a $ANNOTATION -o $OUT  -T $CORES --primary -t exon -g gene_id ${BAM_FILES}/*.bam
+
+echo "=========================================================="
+echo "Job Finished  $SLURM_JOB_ID:"
+date
+echo "=========================================================="
