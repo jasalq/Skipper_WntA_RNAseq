@@ -405,3 +405,12 @@ echo "=========================================================="
 echo "Job Finished  $SLURM_JOB_ID:"
 date
 echo "=========================================================="
+
+
+# install Owltools
+
+download release file from here https://github.com/owlcollab/owltools
+chmod +x owltools
+module load jdk
+export PATH=$PATH:/CCAS/groups/martinlab/jasmine/software
+owltools -h
