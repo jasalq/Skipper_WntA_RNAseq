@@ -1,4 +1,4 @@
-# Skipper_WntA
+# Skipper_WntA_RNAseq
 ## Pipeline Outline 
 1. [RNAseq Quality Assessment](#assessment-of-rna-sequencing-quality-using-fastqc) 
 2. [Adapter Trimming](#adapter-trimming-using-fastp)
