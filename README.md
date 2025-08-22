@@ -1,8 +1,7 @@
 # Skipper_WntA_RNAseq
 ## Pipeline Outline 
 1. [RNAseq Quality Assessment](#assessment-of-rna-sequencing-quality-using-fastqc) 
-2. [Adapter Trimming](#adapter-trimming-using-fastp)
-3. [Read Mapping to the Reference Genome]
+2. [Read Mapping to the Reference Genome]
 
 ### Tools Used 
 
@@ -37,9 +36,6 @@ for i in *fastq.gz; do
         fastqc -f fastq -t 24 -o /scratch/martinlab/jasmine/Skipper_data/fastqc_output $i;
         done
 ```
-## Adapter Trimming using Fastp
-Trim the adapters and polyG tails with Fastp
-
 ## Read Mapping
 
 **Download <em>E. clarus</em> RefSeq genome and annotation from NCBI using NCBI Datasets tool** 
