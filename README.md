@@ -10,11 +10,11 @@ This repository contains all code associated with the differential expression an
 ## Pipeline Outline 
 1. [RNAseq Quality Assessment](#assessment-of-rna-sequencing-quality-using-fastqc) 
 2. [Adding Drosophila Homology Evidence to the Genome Annotation](#homology-searches-using-reciprocal-blastp-to-flybase)
-3. [Read Mapping to the Reference Genome](#star-mapping-of-rnaseq-data-to-the-e-clarus-reference-genome-gcf_0412225051)
-4. [Read Counting](#read-counts-with-featurecounts)
-5. [Differential Expression Analysis DESeq2](#differential-expression-analysis-with-deseq2-in-rstudio)
-6. [Heatmap and Count Plots Data Visualization](#differential-expression-analysis-with-deseq2-in-rstudio)
-7. [GO Enrichment Analysis with GO Subsets](#go-enrichment-analysis-with-go-subsets)
+3. [Read Mapping to the Reference Genome](star-mapping-of-rnaseq-data-to-the-e-clarus--reference-genome-gcf_0412225051)
+5. [Read Counting](#read-counts-with-featurecounts)
+6. [Differential Expression Analysis DESeq2](#differential-expression-analysis-with-deseq2-in-rstudio)
+7. [Heatmap and Count Plots Data Visualization](#differential-expression-analysis-with-deseq2-in-rstudio)
+8. [GO Enrichment Analysis with GO Subsets](#go-enrichment-analysis-with-go-subsets)
 
 
 ### Tools Used 
@@ -442,7 +442,7 @@ date
 echo "=========================================================="
 ```
 ## Differential Expression Analysis with DESeq2 in RStudio
-An R script with all of the code detailed below is [here](https://github.com/jasalq/)
+An R script with all of the code detailed below is [here](Skipper_WntA_DESeq_final_code.R)
 
 Set working directory
 ```
