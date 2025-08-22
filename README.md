@@ -409,6 +409,735 @@ echo "Job Finished  $SLURM_JOB_ID:"
 date
 echo "=========================================================="
 ```
+## Differential Expression Analysis with DESeq2 in RStudio
+An R script with all of the code detailed below is [here](https://github.com/jasalq/)
+
+Set working directory
+```
+setwd("/Users/jasminealqassar/Library/CloudStorage/GoogleDrive-j.alqassar@gwmail.gwu.edu/.shortcut-targets-by-id/1Hi7WIp_ha7vnyQUclvt-AJRl6AF8y1hj/Martin Lab/@LabData/2025_Skipper_WntA/SSS_Differential_Expression/R_working_dir")
+```
+Install and load all necessary packages
+```
+install.packages("tidyverse"); install.packages("stringr"); install.packages("dplyr"); install.packages("DESeq2")
+library(tidyverse); library(stringr); library(dplyr); library(DESeq2); library(ggplot2); library(readxl)
+```
+### Differential expression analysis of wing type (Forewing vs Hindwing) at 36hrs (12% pupal development)
+```
+# read the two counts files in 
+
+seqdata_se <- read_tsv("skipper_rnaseq_se.featurecounts.txt", comment="#")
+seqdata_pe <- read_tsv("skipper_rnaseq_pe.featurecounts.txt", comment="#")
+
+# remove columns other than Geneid and sample counts
+seqdata_se = seqdata_se %>%
+  select(-Chr, -Start, -End, -Strand, -Length)
+
+seqdata_pe = seqdata_pe %>%
+  select(-Chr, -Start, -End, -Strand, -Length)
+
+seqdata <- seqdata_se %>%
+  left_join(seqdata_pe, by = c("Geneid" = "Geneid")) 
+
+# Now rename the "Geneid" column to "Symbol" because that is the appropriate name. NOTE this is the original NCBI symbol so we need to replace it with Geneid before we go further so everything has a unique accession number 
+seqdata <- seqdata %>%
+  rename("Geneid" = "old_symbol")
+
+#read in the original NCBI gene annotation table 
+Symbol_to_Geneid <- read_excel("Ecla_gene_annotation_table_orig.xlsx")
+
+Symbol_to_Geneid <- Symbol_to_Geneid %>%
+  select(Symbol, Geneid)
+
+seqdata <- seqdata %>%
+  left_join(Symbol_to_Geneid, by = c("old_symbol" = "Symbol"))  %>%
+  drop_na() %>%
+  relocate("Geneid", .after = "old_symbol") %>%
+  select(-"old_symbol")
+
+#rename by sample 
+seqdata <- seqdata %>%
+  rename_with(~ ifelse(
+    . %in% c("Geneid"),
+    .,
+    str_extract(., "[^/]+(?=_pass2_mappedAligned\\.sortedByCoord\\.out\\.bam)")
+  ))
+
+#transform raw data into a matrix of counts
+countdata <- seqdata  %>%
+  group_by(Geneid) %>%
+  column_to_rownames("Geneid") %>%
+  as.matrix()
+
+#Remove the genes that are not/lowly expressed:
+
+keep <- rowSums(countdata) > 0 
+head(keep)
+table(keep)
+
+countdata <-countdata[keep, ]
+dim(countdata)
+head(countdata)
+
+# QC of counts 
+summary(countdata)
+boxplot(countdata, las=2)
+
+# Define %out% function
+
+`%out%` <- function(x, y) !(x %in% y)
+
+### before doing analysis by wing type we need to collapse the different compartments of the wing for each individual 
+
+sampleinfo <- read_tsv("sample_info.txt")
+sampleinfo
+
+sampleinfo <- sampleinfo %>%
+  mutate(collapse_group = paste(individual, wing_type, sep = "_"))
+
+countdata <- as.data.frame(countdata)
+countdata$gene_id <- rownames(countdata)
+countdata <- as_tibble(countdata)
+
+group_map <- sampleinfo$collapse_group
+names(group_map) <- sampleinfo$sample
+
+# now I want to do FW vs HW analysis so I will drop the head sample and collapse compartments
+
+collapsed_counts <- countdata %>%
+  select(-"5d_female_ind1_head") %>%
+  pivot_longer(-gene_id, names_to = "sample", values_to = "count") %>%
+  mutate(group = group_map[sample]) %>%
+  group_by(gene_id, group) %>%
+  summarise(count = sum(count), .groups = "drop") %>%
+  pivot_wider(names_from = group, values_from = count)
+
+collapsed_counts <- collapsed_counts  %>%
+  group_by(gene_id) %>%
+  column_to_rownames("gene_id") %>%
+  as.matrix()
+
+
+sampleinfo_hw_fw <- read_tsv("fw_hw_samples.txt")
+
+collapsed_counts_36h_only <- as.data.frame(collapsed_counts) %>%
+  rownames_to_column("Geneid") 
+
+collapsed_counts_36h_only <- collapsed_counts_36h_only %>%
+  select(Geneid, starts_with("36"))
+
+sampleinfo_hw_fw_36h <- sampleinfo_hw_fw %>%
+  filter(grepl("^36", .[[1]]))
+
+collapsed_counts_36h_only <- collapsed_counts_36h_only  %>%
+  group_by(Geneid) %>%
+  column_to_rownames("Geneid") %>%
+  as.matrix()
+
+# order the sample info and count data the same 
+sampleinfo_hw_fw_36h <- sampleinfo_hw_fw_36h[match(colnames(collapsed_counts_36h_only),
+                                                   sampleinfo_hw_fw_36h[[1]]), ]
+# check the sample info and count data are in the same order
+all(colnames(collapsed_counts_36h_only) == sampleinfo_hw_fw_36h[[1]])
+
+
+dds <- DESeqDataSetFromMatrix(
+  countData = collapsed_counts_36h_only,
+  colData = sampleinfo_hw_fw_36h,
+  design = ~ wing_type
+)
+
+ddsObj.raw <- DESeq(dds)
+ddsObj <- estimateSizeFactors(ddsObj.raw)
+colData(ddsObj.raw)
+colData(ddsObj)
+ddsObj <- DESeq(ddsObj.raw)
+res <- results(ddsObj, alpha=0.05) #adding p-value cutoff
+res
+
+resultsNames(ddsObj) 
+
+#now the top genes diff exp between FW and HW
+wing_type_HW_vs_FW_36h <- results(ddsObj, alpha = 0.05, contrast=c("wing_type","FW","HW"))
+
+sum(wing_type_HW_vs_FW_36h$padj < 0.05, na.rm = TRUE)
+allGenesHW_vs_FW_36h <- as.data.frame(wing_type_HW_vs_FW_36h) %>%
+  rownames_to_column("Geneid") %>% 
+  arrange(padj) 
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+
+allGenesHW_vs_FW_36h <- allGenesHW_vs_FW_36h %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid"))
+
+# Now make a vol plot for FW vs HW
+
+allGenesHW_vs_FW_36h <- allGenesHW_vs_FW_36h %>%
+  mutate(direction = case_when(
+    padj < 0.05 & log2FoldChange > 0 ~ "up",
+    padj < 0.05 & log2FoldChange < 0 ~ "down",
+    TRUE ~ "ns"
+  ))
+
+threshold = 5
+vol_plot <- allGenesHW_vs_FW_36h %>%
+  ggplot(aes(x = log2FoldChange, y = -log10(padj), color = direction)) +  
+  geom_point() +  
+  scale_color_manual(values = c("down" = "#26b3ff", "ns" = "grey", "up" = "#bb0c00"),  
+                     labels = c("down" = "HW", "ns" = "Not significant", "up" = "FW")) +
+  theme(legend.title=element_blank())+
+  ggtitle("") + theme(plot.title = element_text(hjust = 0.5)) +
+  #geom_text(aes(label =Geneid), color = "black", size = 3)
+  
+  geom_text(aes(label = ifelse(-log10(padj) > threshold, Symbol, "")),
+            color = "black", size = 3, nudge_y = 1)  
+vol_plot  
+
+
+library(ggrepel)
+
+vol_plot <- allGenesHW_vs_FW_36h %>%
+  ggplot(aes(x = log2FoldChange, y = -log10(padj), color = direction)) +  
+  scale_y_continuous( limits=c(-2, 70), expand=c(0,0)) +
+  scale_x_continuous( limits=c(-15, 10), expand=c(0,0)) +
+  geom_point(data = filter(allGenesHW_vs_FW_36h, direction == "ns"),
+             aes(x = log2FoldChange, y = -log10(padj), color = direction),
+             show.legend = TRUE) +
+  geom_point(data = filter(allGenesHW_vs_FW_36h, direction != "ns"),
+             aes(x = log2FoldChange, y = -log10(padj), color = direction)) +
+  
+  scale_color_manual(
+    values = c("down" = "#26b3ff", "up" = "#bb0c00", "ns" = "grey"),
+    labels = c("down" = "HW", "up" = "FW", "ns" = "Non-Significant")
+  ) +
+  theme_classic() +
+  theme(legend.title=element_blank())+
+  ggtitle("FW vs HW in 36hr pupae") + theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(
+    data = filter(allGenesHW_vs_FW_36h,  -log10(padj) > 20 | padj < 0.05 & log2FoldChange > 2),
+    aes(label = gene_label), # here edit where you are pulling the label from 
+    color = "black",
+    size = 3,
+    nudge_y = 1,                  # Nudges label vertically
+    max.overlaps = 8, #can increase to Inf
+    segment.color = "black",
+    segment.size = 0.3,
+    fill = alpha("white", 0),
+    label.r = unit(0, "lines"),     # No rounded corners
+    label.size = 0,                 # No label border
+    point.padding = 0,          # Ensures label does not overlap point
+    box.padding = 0             # Controls spacing around labels
+    
+  ) 
+
+vol_plot
+
+#rotated volcano plot 
+
+vol_plot <- allGenesHW_vs_FW_36h %>%
+  ggplot(aes(x = -log10(padj), y = log2FoldChange, color = direction)) +  
+  #scale_y_continuous( limits=c(-2, 70), expand=c(0,0)) +
+  scale_y_continuous( limits=c(-5, 15), expand=c(0,0)) +
+  geom_point(data = filter(allGenesHW_vs_FW_36h, direction == "ns"),
+             aes(x = -log10(padj), y = log2FoldChange, color = direction),
+             show.legend = TRUE) +
+  geom_point(data = filter(allGenesHW_vs_FW_36h, direction != "ns"),
+             aes(x = -log10(padj), y = log2FoldChange, color = direction)) +
+  
+  scale_color_manual(
+    values = c("down" = "#26b3ff", "up" = "#bb0c00", "ns" = "grey"),
+    labels = c("down" = "HW", "up" = "FW", "ns" = "Non-Significant")
+  ) +
+  theme_classic() +
+  theme(legend.title=element_blank())+
+  ggtitle("FW vs HW in 36hr pupae") + theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(
+    data = filter(allGenesHW_vs_FW_36h,  -log10(padj) > 20 | padj < 0.05 & log2FoldChange < -2 | padj < 0.05 & log2FoldChange > 10),
+    aes(label = gene_label), # here edit where you are pulling the label from 
+    color = "black",
+    size = 3,
+    nudge_y = 1,                  # Nudges label vertically
+    max.overlaps = 8, #can increase to Inf
+    segment.color = "black",
+    segment.size = 0.3,
+    fill = alpha("white", 0),
+    label.r = unit(0, "lines"),     # No rounded corners
+    label.size = 0,                 # No label border
+    point.padding = 0,          # Ensures label does not overlap point
+    box.padding = 0             # Controls spacing around labels
+    
+  ) 
+
+vol_plot
+
+# re-arrange stuff before writing final table 
+
+allGenesHW_vs_FW_36h <- allGenesHW_vs_FW_36h %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+
+write.table(allGenesHW_vs_FW_36h, file="DESeq2_Results_36hr_HW_vs_FW.tsv", quote=F, sep="\t", row.names=FALSE, na="")
+
+#get norm counts from deseq
+counts_ddsObj_FW_HW <- counts(ddsObj, normalized=TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "Geneid")
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+counts_ddsObj_FW_HW  <- counts_ddsObj_FW_HW  %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid")) %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+write.table(counts_ddsObj_FW_HW , file="DESeq2_normcounts_36hr_FW_vs_HW.tsv", quote=F, sep="\t", row.names=FALSE, na="")
+
+# MA plot 
+label_data <- allGenesHW_vs_FW_36h %>%
+  filter(padj < 0.05 & !is.na(gene_label))
+
+MA_plot <- allGenesHW_vs_FW_36h %>%
+  ggplot(aes(x = log2(baseMean), y = log2FoldChange, color = direction)) +  
+  scale_y_continuous( limits=c(-5, 15), expand=c(0,0)) +
+  scale_x_continuous( limits=c(-4, 25), expand=c(0,0)) +
+  geom_point(data = filter(allGenesHW_vs_FW_36h, direction == "ns"),
+             aes(x = log2(baseMean), y = log2FoldChange, color = direction),
+             show.legend = TRUE) +
+  geom_point(data = filter(allGenesHW_vs_FW_36h, direction != "ns"),
+             aes(x = log2(baseMean), y = log2FoldChange, color = direction)) +
+  
+  scale_color_manual(
+    values = c("down" = "#26b3ff",  "up" = "#bb0c00", "ns" = "grey"),
+    labels = c("down" = "HW", "up" = "FW", "ns" = "Non-Significant")
+  ) +
+  theme_classic() +
+  theme(legend.title=element_blank())+
+  ggtitle("MA Plot FW vs HW in 36hr pupae") + theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(
+    data = filter(allGenesHW_vs_FW_36h, padj < 0.05 & log2(baseMean) > 15 | padj < 0.05 & log2FoldChange < -2 | padj < 0.05 & log2FoldChange > 10),
+    aes(label = gene_label),
+    color = "black",
+    size = 3,
+    nudge_y = 1,                  # Nudges label vertically
+    max.overlaps = 8,
+    segment.color = "black",
+    segment.size = 0.3,
+    fill = alpha("white", 0),
+    label.r = unit(0, "lines"),     # No rounded corners
+    label.size = 0,                 # No label border
+    point.padding = 0,          # Ensures label does not overlap point
+    box.padding = 0             # Controls spacing around labels
+    
+  ) 
+MA_plot
+```
+
+
+### Differential expression analysis of wing compartments at 36hrs (12% pupal development)
+```
+# read the two counts files in 
+
+seqdata_se <- read_tsv("skipper_rnaseq_se.featurecounts.txt", comment="#")
+seqdata_pe <- read_tsv("skipper_rnaseq_pe.featurecounts.txt", comment="#")
+
+# remove columns other than Geneid and sample counts
+seqdata_se = seqdata_se %>%
+  select(-Chr, -Start, -End, -Strand, -Length)
+
+seqdata_pe = seqdata_pe %>%
+  select(-Chr, -Start, -End, -Strand, -Length)
+
+seqdata <- seqdata_se %>%
+  left_join(seqdata_pe, by = c("Geneid" = "Geneid")) 
+
+# Now rename the "Geneid" column to "Symbol" because that is the appropriate name. NOTE this is the original NCBI symbol so we need to replace it with Geneid before we go further so everything has a unique accession number 
+seqdata <- seqdata %>%
+  rename("Geneid" = "old_symbol")
+
+#read in the original NCBI gene annotation table 
+Symbol_to_Geneid <- read_excel("Ecla_gene_annotation_table_orig.xlsx")
+
+Symbol_to_Geneid <- Symbol_to_Geneid %>%
+  select(Symbol, Geneid)
+
+seqdata <- seqdata %>%
+  left_join(Symbol_to_Geneid, by = c("old_symbol" = "Symbol"))  %>%
+  drop_na() %>%
+  relocate("Geneid", .after = "old_symbol") %>%
+  select(-"old_symbol")
+
+#rename by sample 
+seqdata <- seqdata %>%
+  rename_with(~ ifelse(
+    . %in% c("Geneid"),
+    .,
+    str_extract(., "[^/]+(?=_pass2_mappedAligned\\.sortedByCoord\\.out\\.bam)")
+  ))
+
+#transform raw data into a matrix of counts
+countdata <- seqdata  %>%
+  group_by(Geneid) %>%
+  column_to_rownames("Geneid") %>%
+  as.matrix()
+
+#Remove the genes that are not/lowly expressed:
+
+keep <- rowSums(countdata) > 0 
+head(keep)
+table(keep)
+
+countdata <-countdata[keep, ]
+dim(countdata)
+head(countdata)
+
+# QC of counts 
+summary(countdata)
+boxplot(countdata, las=2)
+
+# Define %out% function
+
+`%out%` <- function(x, y) !(x %in% y)
+
+countdata <- as.data.frame(countdata)
+countdata$gene_id <- rownames(countdata)
+countdata <- as_tibble(countdata)
+
+sampleinfo <- read_tsv("sample_info.txt")
+
+countdata_silver <- countdata %>%
+  rename("gene_id" = "Geneid") 
+
+
+countdata_silver_36h_only <- countdata_silver  %>%
+  select(Geneid, starts_with("36")) 
+
+sampleinfo_silver_36h <- sampleinfo %>%
+  filter(grepl("^36", .[[1]])) 
+
+countdata_silver_36h_only <- countdata_silver_36h_only  %>%
+  group_by(Geneid) %>%
+  column_to_rownames("Geneid") %>%
+  as.matrix()
+
+# order the sample info and count data the same 
+sampleinfo_silver_36h <- sampleinfo_silver_36h[match(colnames(countdata_silver_36h_only),
+                                                     sampleinfo_silver_36h[[1]]), ]
+# check the sample info and count data are in the same order
+all(colnames(countdata_silver_36h_only) == sampleinfo_silver_36h[[1]])
+
+
+dds <- DESeqDataSetFromMatrix(
+  countData = countdata_silver_36h_only,
+  colData = sampleinfo_silver_36h,
+  design = ~ compartment
+)
+
+ddsObj.raw <- DESeq(dds)
+ddsObj <- estimateSizeFactors(ddsObj.raw)
+colData(ddsObj.raw)
+colData(ddsObj)
+ddsObj <- DESeq(ddsObj.raw)
+res <- results(ddsObj, alpha=0.05) #adding p-value cutoff
+res
+
+resultsNames(ddsObj) 
+
+
+#relevel for HWM to be the control 
+ddsObj$compartment <- relevel(ddsObj$compartment, ref = "HWM")
+
+ddsObj <- DESeq(ddsObj)
+resultsNames(ddsObj) 
+
+plotCounts(ddsObj, "LOC140755181", "compartment", normalized=TRUE)
+plotCounts(ddsObj, "LOC140744733", "compartment", normalized=TRUE)
+
+#get norm counts from deseq
+counts_ddsObj_HWM_control <- counts(ddsObj, normalized=TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "Geneid")
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+counts_ddsObj_HWM_control <- counts_ddsObj_HWM_control %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid")) %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+write.table(counts_ddsObj_HWM_control, file="DESeq2_normcounts_36hr_HWM_vs_compartments.tsv", quote=F, sep="\t", row.names=FALSE, na="")
+
+
+# Load results
+res_hwd_hwm <- results(ddsObj, alpha = 0.05, contrast = c("compartment", "HWD", "HWM"))
+res_hwp_hwm <- results(ddsObj, alpha = 0.05, contrast = c("compartment", "HWP", "HWM"))
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+
+sum(res_hwp_hwm$padj < 0.05, na.rm = TRUE)
+
+# Make result tables for all pairwise comparisons 
+# HWP vs HWM 
+allGenes_HWP_VS_HWM_36h <- as.data.frame(res_hwp_hwm) %>%
+  rownames_to_column("Geneid") %>% 
+  arrange(padj) %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid")) %>%
+  mutate(direction = case_when(
+    padj < 0.05 & log2FoldChange > 0 ~ "up",
+    padj < 0.05 & log2FoldChange < 0 ~ "down",
+    TRUE ~ "ns"
+  )) %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+write.table(allGenes_HWP_VS_HWM_36h, file="DESeq2_Results_36hr_HWM_vs_HWP.tsv", quote=F, sep="\t", row.names=FALSE, na="")
+#HWD
+allGenes_HWD_VS_HWM_36h <- as.data.frame(res_hwd_hwm) %>%
+  rownames_to_column("Geneid") %>% 
+  arrange(padj) %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid")) %>%
+  mutate(direction = case_when(
+    padj < 0.05 & log2FoldChange > 0 ~ "up",
+    padj < 0.05 & log2FoldChange < 0 ~ "down",
+    TRUE ~ "ns"
+  )) %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+write.table(allGenes_HWD_VS_HWM_36h, file="DESeq2_Results_36hr_HWM_vs_HWD.tsv", quote=F, sep="\t", row.names=FALSE, na="")
+
+
+#relevel for HWD to be the control to get HWP vs HWD 
+ddsObj$compartment <- relevel(ddsObj$compartment, ref = "HWD")
+
+ddsObj <- DESeq(ddsObj)
+resultsNames(ddsObj) 
+
+
+#get norm counts from deseq
+counts_ddsObj_HWD_control <- counts(ddsObj, normalized=TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "Geneid")
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+counts_ddsObj_HWD_control <- counts_ddsObj_HWD_control %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid")) %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+write.table(counts_ddsObj_HWD_control, file="DESeq2_normcounts_36hr_HWD_vs_compartments.tsv", quote=F, sep="\t", row.names=FALSE, na="")
+
+
+# Load results
+res_hwp_hwd <- results(ddsObj, alpha = 0.05, contrast = c("compartment", "HWP", "HWD"))
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+
+sum(res_hwp_hwd$padj < 0.05, na.rm = TRUE)
+
+# Make result tables for all pairwise comparisons 
+# HWP vs HWM 
+allGenes_HWP_VS_HWD_36h <- as.data.frame(res_hwp_hwd) %>%
+  rownames_to_column("Geneid") %>% 
+  arrange(padj) %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid")) %>%
+  mutate(direction = case_when(
+    padj < 0.05 & log2FoldChange > 0 ~ "up",
+    padj < 0.05 & log2FoldChange < 0 ~ "down",
+    TRUE ~ "ns"
+  )) %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+write.table(allGenes_HWP_VS_HWD_36h , file="DESeq2_Results_36hr_HWD_vs_HWP.tsv", quote=F, sep="\t", row.names=FALSE, na="")
+
+# Now do the three FW comparisons by releveling
+# first FWD vs FWM and FWP vs FWM
+ddsObj$compartment <- relevel(ddsObj$compartment, ref = "FWM")
+
+ddsObj <- DESeq(ddsObj)
+resultsNames(ddsObj) 
+
+
+#get norm counts from deseq
+counts_ddsObj_FWM_control <- counts(ddsObj, normalized=TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "Geneid")
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+counts_ddsObj_FWM_control <- counts_ddsObj_FWM_control %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid")) %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+write.table(counts_ddsObj_FWM_control, file="DESeq2_normcounts_36hr_FWM_vs_compartments.tsv", quote=F, sep="\t", row.names=FALSE, na="")
+
+
+# Load results
+res_fwp_fwm <- results(ddsObj, alpha = 0.05, contrast = c("compartment", "FWP", "FWM"))
+res_fwd_fwm <- results(ddsObj, alpha = 0.05, contrast = c("compartment", "FWD", "FWM"))
+
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+
+sum(res_fwp_fwm$padj < 0.05, na.rm = TRUE)
+
+# Make result tables for all pairwise comparisons 
+# FWP vs FWM 
+allGenes_FWP_VS_FWM_36h <- as.data.frame(res_fwp_fwm) %>%
+  rownames_to_column("Geneid") %>% 
+  arrange(padj) %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid")) %>%
+  mutate(direction = case_when(
+    padj < 0.05 & log2FoldChange > 0 ~ "up",
+    padj < 0.05 & log2FoldChange < 0 ~ "down",
+    TRUE ~ "ns"
+  )) %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+write.table(allGenes_FWP_VS_FWM_36h , file="DESeq2_Results_36hr_FWP_vs_FWM.tsv", quote=F, sep="\t", row.names=FALSE, na="")
+
+
+# Make result tables for all pairwise comparisons 
+# FWD vs FWM 
+allGenes_FWD_VS_FWM_36h <- as.data.frame(res_fwd_fwm) %>%
+  rownames_to_column("Geneid") %>% 
+  arrange(padj) %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid")) %>%
+  mutate(direction = case_when(
+    padj < 0.05 & log2FoldChange > 0 ~ "up",
+    padj < 0.05 & log2FoldChange < 0 ~ "down",
+    TRUE ~ "ns"
+  )) %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+write.table(allGenes_FWD_VS_FWM_36h , file="DESeq2_Results_36hr_FWD_vs_FWM.tsv", quote=F, sep="\t", row.names=FALSE, na="")
+
+
+# revlevel to get FWP vs FWD
+ddsObj$compartment <- relevel(ddsObj$compartment, ref = "FWD")
+
+ddsObj <- DESeq(ddsObj)
+resultsNames(ddsObj) 
+
+
+#get norm counts from deseq
+counts_ddsObj_FWD_control <- counts(ddsObj, normalized=TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "Geneid")
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+counts_ddsObj_FWD_control <- counts_ddsObj_FWD_control %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid")) %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+write.table(counts_ddsObj_FWD_control, file="DESeq2_normcounts_36hr_FWD_vs_compartments.tsv", quote=F, sep="\t", row.names=FALSE, na="")
+
+
+# Load results
+res_fwp_fwd <- results(ddsObj, alpha = 0.05, contrast = c("compartment", "FWP", "FWD"))
+
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+
+sum(res_fwp_fwd$padj < 0.05, na.rm = TRUE)
+
+# Make result tables for all pairwise comparisons 
+# FWP vs FWM 
+allGenes_FWP_VS_FWD_36h <- as.data.frame(res_fwp_fwd) %>%
+  rownames_to_column("Geneid") %>% 
+  arrange(padj) %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid")) %>%
+  mutate(direction = case_when(
+    padj < 0.05 & log2FoldChange > 0 ~ "up",
+    padj < 0.05 & log2FoldChange < 0 ~ "down",
+    TRUE ~ "ns"
+  )) %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+write.table(allGenes_FWP_VS_FWD_36h , file="DESeq2_Results_36hr_FWP_vs_FWD.tsv", quote=F, sep="\t", row.names=FALSE, na="")
+
+
+
+# Now make a heatmap highlighting genes DE in at least one the 3 HW comparisons 
+
+#first make a list of the LOC gene ids of differentially expressed genes 
+
+sigGenes_HWD_vs_HWM <- allGenes_HWD_VS_HWM_36h[!is.na(allGenes_HWD_VS_HWM_36h$padj) & allGenes_HWD_VS_HWM_36h$padj < 0.05, ]
+sigGenes_HWP_vs_HWM <- allGenes_HWP_VS_HWM_36h[!is.na(allGenes_HWP_VS_HWM_36h$padj) & allGenes_HWP_VS_HWM_36h$padj < 0.05, ]
+sigGenes_HWP_vs_HWD <- allGenes_HWP_VS_HWD_36h[!is.na(allGenes_HWP_VS_HWD_36h$padj) & allGenes_HWP_VS_HWD_36h$padj < 0.05, ]
+
+
+
+sigGenes_HW_df <- bind_rows(sigGenes_HWD_vs_HWM, sigGenes_HWP_vs_HWM, sigGenes_HWP_vs_HWD) #keep duplicates for now
+
+# Now do the same for the FW Analyses 
+
+sigGenes_FWD_vs_FWM <- allGenes_FWD_VS_FWM_36h[!is.na(allGenes_FWD_VS_FWM_36h$padj) & allGenes_FWD_VS_FWM_36h$padj < 0.05, ]
+sigGenes_FWP_vs_FWM <- allGenes_FWP_VS_FWM_36h[!is.na(allGenes_FWP_VS_FWM_36h$padj) & allGenes_FWP_VS_FWM_36h$padj < 0.05, ]
+sigGenes_FWP_vs_FWD <- allGenes_FWP_VS_FWD_36h[!is.na(allGenes_FWP_VS_FWD_36h$padj) & allGenes_FWP_VS_FWD_36h$padj < 0.05, ]
+
+sigGenes_FW_df <- bind_rows(sigGenes_FWD_vs_FWM, sigGenes_FWP_vs_FWM, sigGenes_FWP_vs_FWD)  #keep duplicates for now
+
+
+# combine to one dataset HW and FW df 
+sigGenes_HW_FW_df <- bind_rows(sigGenes_HW_df, sigGenes_FW_df) 
+
+
+# Re-adjust p-values globally across all tests (optional)
+
+sigGenes_HW_FW_df <- sigGenes_HW_FW_df[!is.na(sigGenes_HW_FW_df$padj) & sigGenes_HW_FW_df$padj < 0.05, ]
+
+
+sigGenes_HW_FW_df  <- sigGenes_HW_FW_df %>%
+  select(Geneid) %>%
+  distinct(Geneid, .keep_all = TRUE)
+
+
+sigGenes_FW_df <- sigGenes_FW_df %>%
+  select(Geneid) %>%
+distinct(Geneid, .keep_all = TRUE)
+
+sigGenes_HW_df <- sigGenes_HW_df %>%
+  select(Geneid) %>%
+  distinct(Geneid, .keep_all = TRUE)
+```
+
+
+
+
+
+
+
+
+
+
+
 
 # install Owltools
 
