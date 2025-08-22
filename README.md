@@ -36,17 +36,6 @@ for i in *fastq.gz; do
         fastqc -f fastq -t 24 -o /scratch/martinlab/jasmine/Skipper_data/fastqc_output $i;
         done
 ```
-## Read Mapping
-
-**Download <em>E. clarus</em> RefSeq genome and annotation from NCBI using NCBI Datasets tool** 
-```
-mamba activate ncbi_datsets
-datasets download genome accession GCF_041222505.1 --include gtf,rna,cds,protein,genome,seq-report
-unzip ncbi_dataset
-mv /scratch/martinlab/jasmine/skipper_diff_exp/ncbi_skipper_genome/ncbi_dataset/data/GCF_041222505.1 ../../
-```
-**In addition download the list of all annotated genes by clicking "view annotated genes" on the genome release page selecting all and hit download table while clicking "one sequence per gene" option**
-I manually edited the GeneID column to have a LOC prefix
 
 ## Homology Searches Using Reciprocal BLASTp to FlyBase
 **use the protein.faa file from the NCBI download to blast to flybase**
@@ -158,13 +147,17 @@ Ecla_annotation_table  <- Ecla_annotation_table %>%
 write.table(Ecla_annotation_table, file="Ecla_annotation_table_with_flybase_names.tsv", quote=F, sep="\t",row.names=FALSE, na="")
 ```
 
-##STAR MAPPING
-```
-mamba activate star_2.7.11b_JDA 
-
-```
 ## STAR Mapping of RNAseq data to the <em>E. clarus </em> reference genome (GCF_041222505.1)
 
+**Download <em>E. clarus</em> RefSeq genome and annotation from NCBI using NCBI Datasets tool** 
+```
+mamba activate ncbi_datsets
+datasets download genome accession GCF_041222505.1 --include gtf,rna,cds,protein,genome,seq-report
+unzip ncbi_dataset
+mv /scratch/martinlab/jasmine/skipper_diff_exp/ncbi_skipper_genome/ncbi_dataset/data/GCF_041222505.1 ../../
+```
+**In addition download the list of all annotated genes by clicking "view annotated genes" on the genome release page selecting all and hit download table while clicking "one sequence per gene" option**
+I manually edited the GeneID column to have a LOC prefix
 **Download <em>E. clarus</em> RefSeq genome from NCBI using NCBI Datasets tool** 
 ```
 mamba activate NCBI_datsets
