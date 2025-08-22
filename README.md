@@ -1503,8 +1503,10 @@ Z_df<- as.data.frame(Z_df_matrix) %>%
 write.table(Z_df, file="heatmap_HW_FW_DEgenes_36hr_all_without48hcontamind.tsv", quote=F, sep="\t",row.names=FALSE, na="")
 ```
 ## GO Enrichment Analysis
-### Analysis using the GO subset slimGO_agr 
+Inspired by tutorial [here](https://www.nature.com/articles/s41596-024-01020-z#Sec43)
+### Analysis of DEGs using the GO subset slimGO_agr 
 Download the slimGO_agr dataset [here](https://geneontology.org/docs/go-subset-guide/)	
+
 **First with Owltools map the slim terms to the existing NCBI GO annotation for the Ecla genome (located On the NCBI FTP Server)**
 Install Owltools
 ```
@@ -1540,4 +1542,174 @@ cd /scratch/martinlab/jasmine/skipper_diff_exp/GO_term_analyses
 
 owltools go.obo --gaf GCF_041222505.1-RS_2025_04_gene_ontology.gaf --map2slim --subset goslim_agr --write-gaf GCF_041222505.1-RS_2025_04_slim_GO.mapped.gaf
 ```
+**Now back in RStudio perform the GO enrichment analysis with <em>clusterProfiler</em>**
+
+**GO enrichment analysis with the whole HW vs FW results at 36hr**
+```
+sigGenes_whole_HW_vs_FW<- allGenesHW_vs_FW_36h[!is.na(allGenesHW_vs_FW_36h$padj) & allGenesHW_vs_FW_36h$padj < 0.05, ]
+
+library(clusterProfiler)
+
+#install.packages("BaseSet")
+library(BaseSet)
+
+gaf_data <- getGAF("GCF_041222505.1-RS_2025_04_slim_GO.mapped.gaf")
+gaf_df <- as.data.frame(gaf_data)
+
+
+gaf_df <- gaf_df %>%
+  relocate("DB_Object_ID", .after = "elements") %>%
+  relocate("elements", .after = "sets") %>%
+  relocate("sets", .after = "DB_Object_ID")
+
+
+DE_genes_HW_FW <- sigGenes_whole_HW_vs_FW %>%
+  select(Geneid)
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+
+Geneid_to_ID <- manual_annotations %>%
+  select("Geneid", `old Gene ID`)
+
+DE_genes_HW_FW <- DE_genes_HW_FW %>%
+  left_join(Geneid_to_ID, by = c("Geneid" = "Geneid")) %>%
+  select(-Geneid)
+
+enrich_result_whole_HW_FW <- compareCluster(DE_genes_HW_FW,
+                                fun = "enricher", TERM2GENE = gaf_df[, c(2, 1)],
+)
+
+
+#install.packages("ontologyIndex")
+library(ontologyIndex)
+download.file("http://purl.obolibrary.org/obo/go.obo", destfile = "go.obo", mode = "wb")
+go <- get_ontology("go.obo", extract_tags = "everything")
+
+go$id[1:5]         # GO IDs
+go$name[1:5]       # GO descriptions
+
+go_df <- data.frame(
+  ID   = go$id,
+  Term = unname(go$name[go$id]),   # use go$id to order the terms to match IDs
+  stringsAsFactors = FALSE
+)
+
+
+
+GO_plot <- dotplot(enrich_result_whole_HW_FW, by = "Count",
+                   showCategory = 6,
+                   label_format = 40) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(vjust = 1, hjust = 1,
+                                   angle = 30, size = 10)) +
+  xlab(NULL) + ggtitle(NULL)
+
+GO_plot
+
+# add term 
+go_map <- setNames(go_df$Term, go_df$ID)
+
+custom_order <- c("GO:0045202", "GO:0005773", "GO:0008289", "GO:0006629","GO:0005783","GO:0032502")
+
+df <- df %>%
+  # Make Description a factor with levels ordered by custom_order of IDs
+ mutate(Description = factor(Description, levels = Description[match(custom_order, ID)])) %>%
+arrange(factor(ID, levels = custom_order))
+
+# Now plot as a bubble plot
+ggplot(df[1:6, ], aes(x = FoldEnrichment, y = Description)) +
+  geom_point(aes(size = Count, color = p.adjust)) +
+  scale_color_continuous(low = "red", high = "blue") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1)) +
+  xlab("Fold Enrichment") +
+  scale_y_discrete( labels = function(ids) {
+    labs <- go_map[ids]
+    labs[is.na(labs)] <- ids[is.na(labs)] # fallback to ID if missing
+    labs
+  }) +
+  ylab(NULL)
+```
+**Perform the analysis on compartment DEGs**
+```
+library(clusterProfiler)
+library(BaseSet)
+library(ontologyIndex)
+
+gaf_data <- getGAF("GCF_041222505.1-RS_2025_04_slim_GO.mapped.gaf")
+gaf_df <- as.data.frame(gaf_data)
+
+
+gaf_df <- gaf_df %>%
+  relocate("DB_Object_ID", .after = "elements") %>%
+  relocate("elements", .after = "sets") %>%
+  relocate("sets", .after = "DB_Object_ID")
+  
+
+DE_genes <- sigGenes_HW_FW_df %>%
+  select(Geneid)
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+
+Geneid_to_ID <- manual_annotations %>%
+  select("Geneid", `old Gene ID`)
+
+DE_genes <- DE_genes %>%
+  left_join(Geneid_to_ID, by = c("Geneid" = "Geneid")) %>%
+  select(-Geneid)
+
+enrich_result <- compareCluster(DE_genes,
+                                          fun = "enricher", TERM2GENE = gaf_df[, c(2, 1)],
+)
+
+download.file("http://purl.obolibrary.org/obo/go.obo", destfile = "go.obo", mode = "wb")
+go <- get_ontology("go.obo", extract_tags = "everything")
+
+go$id[1:5]         # GO IDs
+go$name[1:5]       # GO descriptions
+
+go_df <- data.frame(
+  ID   = go$id,
+  Term = unname(go$name[go$id]),   # use go$id to order the terms to match IDs
+  stringsAsFactors = FALSE
+)
+
+
+
+GO_plot <- dotplot(enrich_result, by = "Count",
+                      showCategory = 7,
+                      label_format = 40) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(vjust = 1, hjust = 1,
+                                   angle = 30, size = 10)) +
+  xlab(NULL) + ggtitle(NULL)
+
+GO_plot
+
+# add term 
+go_map <- setNames(go_df$Term, go_df$ID)
+
+custom_order <- c("GO:0003700", "GO:0038023", "GO:0008092", "GO:0030154", "GO:0032502")
+
+df <- df %>%
+  # Make Description a factor with levels ordered by custom_order of IDs
+  mutate(Description = factor(Description, levels = Description[match(custom_order, ID)])) %>%
+  arrange(factor(ID, levels = custom_order))
+         
+# Now plot a bubble plot
+ggplot(df[1:5, ], aes(x = FoldEnrichment, y = Description)) +
+  geom_point(aes(size = Count, color = p.adjust)) +
+  scale_color_continuous(low = "red", high = "blue") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1)) +
+    xlab("Fold Enrichment") +
+  scale_y_discrete( labels = function(ids) {
+    labs <- go_map[ids]
+    labs[is.na(labs)] <- ids[is.na(labs)] # fallback to ID if missing
+    labs
+  }) +
+  ylab(NULL)
+```
+
+
 
