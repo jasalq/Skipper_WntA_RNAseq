@@ -1,7 +1,7 @@
 # Skipper_WntA_RNAseq
 ## Pipeline Outline 
 1. [RNAseq Quality Assessment](#assessment-of-rna-sequencing-quality-using-fastqc) 
-2. [Read Mapping to the Reference Genome]
+2. [Read Mapping to the Reference Genome](#star-mapping-of-rnaseq-data-to-the-e-clarus-reference-genome-gcf_0412225051)
 
 ### Tools Used 
 
