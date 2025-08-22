@@ -157,7 +157,7 @@ unzip ncbi_dataset
 mv /scratch/martinlab/jasmine/skipper_diff_exp/ncbi_skipper_genome/ncbi_dataset/data/GCF_041222505.1 ../../
 ```
 **In addition download the list of all annotated genes by clicking "view annotated genes" on the genome release page selecting all and hit download table while clicking "one sequence per gene" option**
-I manually edited the GeneID column to have a LOC prefix
+I manually edited the GeneID column to have a LOC prefix	
 **Download <em>E. clarus</em> RefSeq genome from NCBI using NCBI Datasets tool** 
 ```
 mamba activate NCBI_datsets
@@ -1503,18 +1503,41 @@ Z_df<- as.data.frame(Z_df_matrix) %>%
 write.table(Z_df, file="heatmap_HW_FW_DEgenes_36hr_all_without48hcontamind.tsv", quote=F, sep="\t",row.names=FALSE, na="")
 ```
 ## GO Enrichment Analysis
-
-
-
-
-
-
-
-
-# install Owltools
-
+### Analysis using the GO subset slimGO_agr 
+Download the slimGO_agr dataset [here](https://geneontology.org/docs/go-subset-guide/)
+**First with Owltools map the slim terms to the existing NCBI GO annotation for the Ecla genome (located On the NCBI FTP Server)**
+Install Owltools
+```
 download release file from here https://github.com/owlcollab/owltools
 chmod +x owltools
 module load jdk
 export PATH=$PATH:/CCAS/groups/martinlab/jasmine/software
 owltools -h
+```
+Now run the mapping of the slim GO terms to the NCBI GO annotation 
+```
+#!/bin/sh
+#SBATCH -J SSS_GO_slim_mapping
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=j.alqassar@gwu.edu
+#SBATCH -o SSS_GO_slim_mapping.out #redirecting stdout
+#SBATCH -p nano #queue 
+#SBATCH -N 1 #amount of nodes 
+#SBATCH -n 40 #amount of cores 
+#SBATCH -t 00:30:00
+
+
+echo "=========================================================="
+echo "Running on node : $HOSTNAME"
+echo "Current directory : $PWD"
+echo "Current job ID : $SLURM_JOB_ID"
+echo "=========================================================="
+
+PATH=$PATH:/CCAS/groups/martinlab/jasmine/software 
+module load jdk
+
+cd /scratch/martinlab/jasmine/skipper_diff_exp/GO_term_analyses
+
+owltools go.obo --gaf GCF_041222505.1-RS_2025_04_gene_ontology.gaf --map2slim --subset goslim_agr --write-gaf GCF_041222505.1-RS_2025_04_slim_GO.mapped.gaf
+```
+
