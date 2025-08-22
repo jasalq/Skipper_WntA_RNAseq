@@ -1,9 +1,48 @@
 # Skipper_WntA_RNAseq
+<body>  
+This repository contains all code associated with the differential expression analyses performed in the manuscript Alqassar et al. 2025 <a href=""> WntA expression and wing transcriptomics illuminate the evolution of stripe patterns in skipper butterflies </a>. The code found in this repository processes, maps, and performs differential expression analyses on RNA sequencing data generated during the study where we aimed to understand differences in gene expression between wing tissues in skipper butterflies.		
+<body/>	
+<br><br>	
+<strong>Contact info</strong>: Jasmine Alqassar (j.alqassar@gwu.edu) and Arnaud Martin (arnaud@gwu.edu)
+<br><br>
+<strong>Data Availability</strong>: All sequencing data generated during this study has been deposited in the NCBI Sequence Read Archive under BioProject PRJNA660444. 
+
 ## Pipeline Outline 
 1. [RNAseq Quality Assessment](#assessment-of-rna-sequencing-quality-using-fastqc) 
-2. [Read Mapping to the Reference Genome](#star-mapping-of-rnaseq-data-to-the-e-clarus-reference-genome-gcf_0412225051)
+2.[Adding Drosophila Homology Evidence to the Genome Annotation](#homology-searches-using-reciprocal-blastp-to-flybase)
+3.[Read Mapping to the Reference Genome](#star-mapping-of-rnaseq-data-to-the-e-clarus-reference-genome-gcf_0412225051)
+4.[Read Counting](#read-counts-with-featurecounts)
+5.[Differential Expression Analysis DESeq2](#differential-expression-analysis-with-deseq2-in-rstudio)
+6.[Heatmap and Count Plots Data Visualization](#differential-expression-analysis-with-deseq2-in-rstudio)
+7.[GO Enrichment Analysis with GO Subsets](#go-enrichment-analysis-with-go-subsets)
+
 
 ### Tools Used 
+* Blast+ v.2.16.0+
+* Fastp v.0.21.0	
+* FastQC v.0.11.8
+* JDK v.21.0.1
+* NCBI Datasets
+* OWLtools
+* RStudio v2024.04.2+764
+* R/ BaseSet
+* R/ clusterProfiler
+* R/ cowplot
+* R/ DESeq2
+* R/ dplyr
+* R/ ggdendro
+* R/ ggplot2
+* R/ ggrepel
+* R/ gridExtra
+* R/ ontologyIndex
+* R/ pals
+* R/ patchwork
+* R/ readxl
+* R/ reshape2
+* R/ stringr
+* R/ tidyverse
+* STAR v.2.7.11b
+* Subread v.2.0.8
 
 ## Assessment of RNA Sequencing Quality using FastQC
 Quality of RNA sequencing was accessed using FastQC
@@ -1117,7 +1156,7 @@ sigGenes_HW_df <- sigGenes_HW_df %>%
   select(Geneid) %>%
   distinct(Geneid, .keep_all = TRUE)
 ```
-## Heatmap and count plots data visualization 
+## Heatmap and Count Plots Data Visualization 
 ### First I need to re-run DEseq to get the counts for all samples in the heatmap except the samples we removed from the entire analysis because of poor quality
 ```
 sampleinfo_all <- read_tsv("sample_info_new.txt")
@@ -1320,7 +1359,7 @@ plot
 ### Generating A Heatmap with the differentially expressed genes found in the compartment analysis 
 ```
 #load necessary packages
-library(readxl);library(DESeq2);library(reshape2);library(ggdendro);library(khroma);library(viridis);library(gridExtra);library(cowplot);library(pals)
+library(readxl);library(DESeq2);library(reshape2);library(ggdendro);library(gridExtra);library(cowplot);library(pals)
 
 # perform variance stabilizing transformation 
 vsd <- vst(ddsObj)
@@ -1502,7 +1541,7 @@ Z_df<- as.data.frame(Z_df_matrix) %>%
 
 write.table(Z_df, file="heatmap_HW_FW_DEgenes_36hr_all_without48hcontamind.tsv", quote=F, sep="\t",row.names=FALSE, na="")
 ```
-## GO Enrichment Analysis
+## GO Enrichment Analysis with GO Subsets
 Inspired by tutorial [here](https://www.nature.com/articles/s41596-024-01020-z#Sec43)
 ### Analysis of DEGs using the GO subset slimGO_agr 
 Download the slimGO_agr dataset [here](https://geneontology.org/docs/go-subset-guide/)	
