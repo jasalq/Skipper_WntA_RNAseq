@@ -1504,7 +1504,7 @@ write.table(Z_df, file="heatmap_HW_FW_DEgenes_36hr_all_without48hcontamind.tsv",
 ```
 ## GO Enrichment Analysis
 ### Analysis using the GO subset slimGO_agr 
-Download the slimGO_agr dataset [here](https://geneontology.org/docs/go-subset-guide/)
+Download the slimGO_agr dataset [here](https://geneontology.org/docs/go-subset-guide/)	
 **First with Owltools map the slim terms to the existing NCBI GO annotation for the Ecla genome (located On the NCBI FTP Server)**
 Install Owltools
 ```
