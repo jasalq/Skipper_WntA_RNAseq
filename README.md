@@ -1108,9 +1108,6 @@ sigGenes_FW_df <- bind_rows(sigGenes_FWD_vs_FWM, sigGenes_FWP_vs_FWM, sigGenes_F
 # combine to one dataset HW and FW df 
 sigGenes_HW_FW_df <- bind_rows(sigGenes_HW_df, sigGenes_FW_df) 
 
-
-# Re-adjust p-values globally across all tests (optional)
-
 sigGenes_HW_FW_df <- sigGenes_HW_FW_df[!is.na(sigGenes_HW_FW_df$padj) & sigGenes_HW_FW_df$padj < 0.05, ]
 
 
@@ -1127,10 +1124,392 @@ sigGenes_HW_df <- sigGenes_HW_df %>%
   select(Geneid) %>%
   distinct(Geneid, .keep_all = TRUE)
 ```
+## Heatmap and count plots data visualization 
+### First I need to re-run DEseq to get the counts for all samples in the heatmap except the samples we removed from the entire analysis because of poor quality
+```
+sampleinfo_all <- read_tsv("sample_info_new.txt")
+sampleinfo_all <- sampleinfo_all %>% 
+  filter(!grepl("^5d", .[[1]])) %>% 
+  filter(!grepl("^48h_male_ind2", .[[1]])) %>% 
+  filter(!grepl("^48h_male_ind3_FWP", .[[1]])) %>% 
+  filter(!grepl("^48h_male_ind3_FWM", .[[1]])) %>% 
+  filter(!grepl("^48h_male_ind4_FWD", .[[1]])) %>% 
+  filter(!grepl("^48h_male_ind5_FWD", .[[1]])) %>% 
+  filter(!grepl("^48h_male_ind1", .[[1]]))
+
+countdata_all <- countdata %>%
+  rename("gene_id" = "Geneid") %>%
+  select(-starts_with("5d")) %>%
+  select(-starts_with("48h_male_ind2"))%>%
+  select(-starts_with("48h_male_ind3_FWP"))%>%
+  select(-starts_with("48h_male_ind3_FWM"))%>%
+  select(-starts_with("48h_male_ind4_FWD")) %>%
+  select(-starts_with("48h_male_ind5_FWD")) %>%
+  select(-starts_with("48h_male_ind1")) 
+  
+  
+countdata_all <- countdata_all %>%
+  group_by(Geneid) %>%
+  column_to_rownames("Geneid") %>%
+  as.matrix()
+
+# order the sample info and count data the same 
+sampleinfo_all <- sampleinfo_all[match(colnames(countdata_all),
+                                             sampleinfo_all[[1]]), ]
+# check the sample info and count data are in the same order
+all(colnames(countdata_all) == sampleinfo_all[[1]])
+
+
+dds <- DESeqDataSetFromMatrix(
+  countData = countdata_all,
+  colData = sampleinfo_all,
+  design = ~ compartment
+)
+
+ddsObj.raw <- DESeq(dds)
+ddsObj <- estimateSizeFactors(ddsObj.raw)
+colData(ddsObj.raw)
+colData(ddsObj)
+ddsObj <- DESeq(ddsObj.raw)
+res <- results(ddsObj, alpha=0.05) #adding p-value cutoff
+res
+
+resultsNames(ddsObj) 
+
+ddsObj$compartment <- relevel(ddsObj$compartment, ref = "36h_HWM")
+
+ddsObj <- DESeq(ddsObj)
+resultsNames(ddsObj) 
+
+
+#get norm counts from deseq
+counts_ddsObj_for_heatmap <- counts(ddsObj, normalized=TRUE) %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "Geneid")
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+counts_ddsObj_for_heatmap <- counts_ddsObj_for_heatmap %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid")) %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+write.table(counts_ddsObj_for_heatmap, file="DESeq2_normcounts_for_heatmap.tsv", quote=F, sep="\t", row.names=FALSE, na="")
+```
+### Generating Count Plots
+
+Now make an individual count plot for a specific gene 
+```
+# Now make individual count plots for specific genes (for example the gene WntA)
+plotCounts(ddsObj, "LOC140755181", normalized=TRUE, intgroup = "compartment") #default DESeq plot
+
+# extract counts for WntA
+WntA_normalized_counts <- counts(ddsObj, normalized=TRUE)["LOC140755181", ]
+normcounts <- counts(ddsObj, normalized=TRUE)
+WntA_counts_plot_data <- data.frame(
+  gene_counts = WntA_normalized_counts,
+  condition = colData(dds)$compartment )
+
+
+WntA_counts_plot_data$condition <- factor(WntA_counts_plot_data$condition, levels = c("L5_FW", "L5_HW", "36h_FWP", "36h_FWM", "36h_FWD", "36h_HWP", "36h_HWM", "36h_HWD", "48h_FWP", "48h_FWM", "48h_FWD", "48h_HWP", "48h_HWM", "48h_HWD"))
+WntA_counts_plot_data <- WntA_counts_plot_data %>%
+  mutate(group = case_when(
+    grepl("^36h_FW", condition) ~ "36h_FW",
+    grepl("^36h_HW", condition) ~ "36h_HW",
+    grepl("^48h_FW", condition) ~ "48h_FW",
+    grepl("^48h_HW", condition) ~ "48h_HW",
+    grepl("^L5_HW", condition) ~ "L5_HW",
+    grepl("^L5_FW", condition) ~ "L5_FW",
+  ))
+
+WntA_counts_plot_data <- WntA_counts_plot_data %>%
+  mutate(color_col = case_when(
+    grepl("^36h_FW", condition) ~ "#4477AA",
+    grepl("^36h_HW", condition) ~ "#66CCEE",
+    grepl("^48h_FW", condition) ~ "#CCBB44",
+    grepl("^48h_HW", condition) ~ "#EE6677",
+  ))
+
+ggplot(WntA_counts_plot_data, aes(x = condition, y = gene_counts)) +
+  #scale_y_continuous( limits=c(0, 3000), expand=c(0,0)) +
+  geom_point() +
+  #theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1)) +
+  xlab("Compartment") +
+  ylab("Counts") +
+  ggtitle("WntA") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  stat_summary(fun =mean,geom="line",lwd=1, aes(group=group, color= color_col) ) +
+  scale_color_identity(guide = "none") +   # use the hex codes as-is 
+  theme(legend.position = "none")  # remove the legend
+```
+Generate one large matrix with many count plots
+```
+normcounts <- counts(ddsObj, normalized=TRUE)
+
+# Now try to make a large matrix with the plots aligned with 4 plots per row
+gene_list_for_count_plot <- read_tsv("new_gene_list.txt")
+
+gene_list_for_count_plot <- gene_list_for_count_plot %>%
+  select(Geneid, Gene_label)
+
+counts_plot_data <- data.frame(normcounts, check.names = FALSE)
+counts_plot_data <- counts_plot_data  %>%
+  rownames_to_column("Geneid")
+
+counts_plot_data <- counts_plot_data %>%
+  filter(Geneid %in% gene_list_for_count_plot$Geneid)  
+
+
+# Make a longer count matrix with a row for the count data for each sample for the gene included in the count plots 
+counts_long <- counts_plot_data %>%
+  pivot_longer(
+    cols = -Geneid,
+    names_to = "sample_id",
+    values_to = "gene_counts"
+  )
+
+#Add the gene labels you want for the plot
+counts_long <- counts_long %>%
+  left_join(gene_list_for_count_plot, by = "Geneid")
+
+#Get the sample info from DESeq2 object
+sample_info <- as.data.frame(colData(ddsObj)) %>%
+  rownames_to_column("sample_id")
+
+counts_long <- counts_long %>%
+  left_join(sample_info, by = "sample_id")
+
+# Now add groupings that you want and color codes for the regression lines 
+counts_long <- counts_long %>%
+  mutate(condition = factor(compartment,
+                            levels = c("L5_FW", "L5_HW", 
+                                       "36h_FWP", "36h_FWM", "36h_FWD", 
+                                       "36h_HWP", "36h_HWM", "36h_HWD",
+                                       "48h_FWP", "48h_FWM", "48h_FWD", 
+                                       "48h_HWP", "48h_HWM", "48h_HWD")))%>%
+  mutate(group = case_when(
+    grepl("^36h_FW", condition) ~ "36h_FW",
+    grepl("^36h_HW", condition) ~ "36h_HW",
+    grepl("^48h_FW", condition) ~ "48h_FW",
+    grepl("^48h_HW", condition) ~ "48h_HW",
+    grepl("^L5_HW", condition)  ~ "L5_HW",
+    grepl("^L5_FW", condition)  ~ "L5_FW"
+  )) %>%
+  mutate(color_col = case_when(
+    grepl("^36h_FW", condition) ~ "#4477AA",
+    grepl("^36h_HW", condition) ~ "#66CCEE",
+    grepl("^48h_FW", condition) ~ "#CCBB44",
+    grepl("^48h_HW", condition) ~ "#EE6677"
+  ))
+#This line then forces it to be plotted in the order you specified before 
+counts_long <- counts_long %>%
+  mutate(Gene_label = factor(Gene_label, 
+                             levels = gene_list_for_count_plot$Gene_label))
+plot <- ggplot(counts_long, aes(x = condition, y = gene_counts)) +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1)) +
+  xlab("Compartment") +
+  ylab("Counts") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  stat_summary(fun = mean, geom = "line", lwd = 1.5,
+               aes(group = group, color = color_col)) +
+  scale_color_identity(guide = "none") +
+  facet_wrap(~ Gene_label, scales='free', drop = TRUE, ncol = 4) +
+  theme(legend.position = "none") +
+  scale_y_continuous(
+    breaks = function(x) pretty(x),        
+    labels = function(b) format(b, trim=TRUE)  # force all breaks to show more labels 
+  )
+plot  
+```
+### Generating A Heatmap with the differentially expressed genes found in the compartment analysis 
+```
+#load necessary packages
+library(readxl);library(DESeq2);library(reshape2);library(ggdendro);library(khroma);library(viridis);library(gridExtra);library(cowplot);library(pals)
+
+# perform variance stabilizing transformation 
+vsd <- vst(ddsObj)
+vst_mat <- assay(vsd)
+
+vst_df <- as.data.frame(vst_mat) %>%
+  rownames_to_column("Geneid")
+
+#Set rownames and remove Geneid column before scaling
+
+mat <- vst_df
+rownames(mat) <- mat$Geneid
+mat$Geneid <- NULL
+
+# Z-score across compartments (i.e., scale by row)
+Z <- t(scale(t(as.matrix(mat))))
+
+# Convert to dataframe and keep gene IDs
+Z <- as.data.frame(Z) %>%
+  rownames_to_column("Geneid")
+
+#filter by significant genes
+Z <- Z[Z$Geneid %in% sigGenes_HW_FW_df$Geneid, ]
+
+# add manual annotations 
+
+manual_annotations <- manual_annotations %>%
+  select(`Geneid`, Symbol)
+
+Z <- Z %>%
+  left_join(manual_annotations, by = c("Geneid" = "Geneid")) %>%
+  select(-Geneid)
+
+# Melt to long format for ggplot2
+
+library(reshape2); library(ggdendro)
+Z_df <- melt(Z)
+Z_df <- na.omit(Z_df)
+colnames(Z_df) <- c("Gene", "Sample", "Expression")
+
+
+# Convert to wide matrix format for clustering
+
+Z_df_matrix <- dcast(Z_df, Gene ~ Sample, value.var = "Expression")
+rownames(Z_df_matrix) <- Z_df_matrix$Gene
+Z_df_matrix$Gene <- NULL
+
+# Compute distances and gene and sample clusters
+distanceGene <- dist(Z_df_matrix)
+clusterGene <- hclust(distanceGene, method = "average")
+gene_order <- clusterGene$labels[clusterGene$order] 
+Z_df$Gene <- factor(Z_df$Gene, levels = gene_order)
+
+# Make dendogram for genes
+geneModel <- as.dendrogram(clusterGene)
+geneDendrogramData <- segment(dendro_data(geneModel, type = "rectangle"))
+geneDendrogram <- ggplot(geneDendrogramData) +
+  geom_segment(aes(x = x, y = y, xend = xend, yend = yend)) +
+  coord_flip() +
+  scale_y_reverse(expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0)) +
+  theme_dendro()
+
+
+#Re-factor samples for ggplot2, ordering by compartment and time 
+Z_df$Sample <- factor(Z_df$Sample, levels = c("L5_ind1_FW", "L5_ind2_FW", "L5_ind3_FW", "L5_ind1_HW", "L5_ind2_HW", "L5_ind3_HW", "36h_female_ind1_FWP", "36h_female_ind2_FWP", "36h_male_ind3_FWP",  "36h_female_ind2_HWP", "36h_male_ind3_HWP", "36h_female_ind1_FWM", "36h_female_ind2_FWM", "36h_male_ind3_FWM", "36h_female_ind1_HWM", "36h_female_ind2_HWM", "36h_male_ind3_HWM", "36h_female_ind1_FWD", "36h_female_ind2_FWD", "36h_male_ind3_FWD", "36h_female_ind1_HWD", "36h_female_ind2_HWD", "36h_male_ind3_HWD", "48h_male_ind1_FWP", "48h_male_ind5_FWP", "48h_male_ind4_HWP", "48h_male_ind5_HWP", "48h_male_ind1_FWM",  "48h_male_ind4_FWM", "48h_male_ind5_FWM", "48h_male_ind4_HWM", "48h_male_ind5_HWM", "48h_male_ind3_FWD",  "48h_male_ind5_FWD", "48h_male_ind4_HWD", "48h_male_ind5_HWD"))
+
+# Define your color palettes you might use and load libraries
+library(pals)
+ocean.balance <- ocean.balance
+coolwarm <- coolwarm
+library(gridExtra); library(patchwork); library(cowplot)
+
+#Construct the heatmap
+heatmap <- ggplot(Z_df, aes(x=Sample, y=Gene, fill=Expression)) + geom_raster() + scale_fill_gradientn(colours =coolwarm(256)) + theme(axis.text.x=element_text(angle=65, hjust=1), axis.text.y = element_blank(), axis.ticks.y=element_blank())
+heatmap
+grid.arrange(geneDendrogram, heatmap, ncol=1, heights=c(1,5))
+
+
+# Create heatmap
+heatmap <- ggplot(Z_df, aes(x = Sample, y = Gene, fill = Expression)) +
+  geom_raster() +
+  scale_fill_gradientn(colours = coolwarm(256)) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 65, hjust = 1),
+    axis.text.y = element_text(size = 6),
+    axis.ticks.y = element_blank(),
+    strip.text = element_text(size = 10, face = "bold"
+    ))
+
+heatmap
+# Remove duplicated legend
+heatmap_clean <- heatmap + theme(legend.position = "none")
+
+# Arrange plots
+
+mid_row <- plot_grid(geneDendrogram, heatmap_clean, ncol = 2, rel_widths = c(0.2, 1))
+legend <- get_legend(heatmap)
+
+# Final layout
+final_plot <- plot_grid(mid_row, ncol = 1, rel_heights = c(0.2, 1))
+plot_grid(final_plot, legend, rel_widths = c(1, 0.12))
 
 
 
+manual_annotations_heatmap <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
 
+manual_annotations_heatmap  <- manual_annotations_heatmap  %>%
+  select(Symbol, gene_label)
+
+Z_df <- Z_df %>%
+  left_join(manual_annotations_heatmap, by = c("Gene" = "Symbol"))
+
+# Re-enforce clustering order
+Z_df$Gene <- factor(Z_df$Gene, levels = gene_order)
+
+
+# Generate label mapping safely (including NAs)
+gene_label_map <- setNames(Z_df$gene_label, as.character(Z_df$Gene)) 
+
+# Plot
+heatmap <- ggplot(Z_df, aes(x = Sample, y = Gene, fill = Expression)) +
+  geom_raster() +
+  scale_fill_gradientn(colours = coolwarm(256)) +
+  scale_y_discrete(labels = gene_label_map) +  # override tick labels
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 65, hjust = 1),
+    axis.text.y = element_text(size = 6),
+    axis.ticks.y = element_blank(),
+    strip.text = element_text(size = 10, face = "bold")
+  )
+
+heatmap
+
+heatmap <- ggplot(Z_df, aes(x=Sample, y=Gene, fill=Expression)) + geom_raster() + scale_fill_gradientn(colours =coolwarm(256)) + theme(axis.text.x=element_text(angle=65, hjust=1), axis.text.y = element_blank(), axis.ticks.y=element_blank())
+heatmap
+grid.arrange(geneDendrogram, heatmap, ncol=1, heights=c(1,5))
+
+
+# Create heatmap
+heatmap <- ggplot(Z_df, aes(x = Sample, y = Gene, fill = Expression)) +
+  geom_raster() +
+  scale_fill_gradientn(colours = coolwarm(256)) +
+  scale_y_discrete(labels = gene_label_map) +  # override tick labels
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 65, hjust = 1),
+    axis.text.y = element_text(size = 6),
+    axis.ticks.y = element_blank(),
+    strip.text = element_text(size = 10, face = "bold"
+    ))
+
+heatmap
+# Remove duplicated legend
+heatmap_clean <- heatmap + theme(legend.position = "none")
+
+# Arrange plots
+
+mid_row <- plot_grid(geneDendrogram, heatmap_clean, ncol = 2, rel_widths = c(0.2, 1))
+legend <- get_legend(heatmap)
+
+# Final layout
+final_plot <- plot_grid(mid_row, ncol = 1, rel_heights = c(0.2, 1))
+plot_grid(final_plot, legend, rel_widths = c(1, 0.12))
+
+
+
+manual_annotations <- read_excel("working_Ecla_annotation_table_with_flybase_names.xlsx")
+
+Z_df<- as.data.frame(Z_df_matrix) %>%
+  rownames_to_column("Symbol")%>%
+  left_join(manual_annotations, by = c("Symbol" = "Symbol")) %>%
+  relocate("Symbol", .after = "Geneid") %>%
+  relocate("Name", .after = "Symbol") %>%
+  relocate("FB_gene_symbol", .after = "Name") %>%
+  relocate("gene_fullname", .after = "FB_gene_symbol")
+
+write.table(Z_df, file="heatmap_HW_FW_DEgenes_36hr_all_without48hcontamind.tsv", quote=F, sep="\t",row.names=FALSE, na="")
+```
+## GO Enrichment Analysis
 
 
 
