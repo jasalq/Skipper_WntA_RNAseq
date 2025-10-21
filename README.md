@@ -13,7 +13,7 @@ This repository contains all code associated with the differential expression an
 3. [Read Mapping to the Reference Genome](star-mapping-of-rnaseq-data-to-the-e-clarus--reference-genome-gcf_0412225051)
 5. [Read Counting](#read-counts-with-featurecounts)
 6. [Differential Expression Analysis DESeq2](#differential-expression-analysis-with-deseq2-in-rstudio)
-7. [Heatmap and Count Plots Data Visualization](#differential-expression-analysis-with-deseq2-in-rstudio)
+7. [Heatmap and Count Plots Data Visualization](#generating-a-heatmap-with-the-differentially-expressed-genes-found-in-the-compartment-analysis)
 8. [GO Enrichment Analysis with GO Subsets](#go-enrichment-analysis-with-go-subsets)
 
 
