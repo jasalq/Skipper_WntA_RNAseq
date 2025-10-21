@@ -1542,7 +1542,7 @@ Z_df<- as.data.frame(Z_df_matrix) %>%
 write.table(Z_df, file="heatmap_HW_FW_DEgenes_36hr_all_without48hcontamind.tsv", quote=F, sep="\t",row.names=FALSE, na="")
 ```
 ## GO Enrichment Analysis with GO Subsets
-Inspired by tutorial [here](https://www.nature.com/articles/s41596-024-01020-z#Sec43)
+Inspired by the tutorial [here](https://www.nature.com/articles/s41596-024-01020-z#Sec43)
 ### Analysis of DEGs using the GO subset slimGO_agr 
 Download the slimGO_agr dataset [here](https://geneontology.org/docs/go-subset-guide/)	
 
