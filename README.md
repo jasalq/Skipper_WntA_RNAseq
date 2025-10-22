@@ -1213,6 +1213,21 @@ ddsObj$compartment <- relevel(ddsObj$compartment, ref = "36h_HWM")
 ddsObj <- DESeq(ddsObj)
 resultsNames(ddsObj) 
 
+#Make a PCA
+
+vsd <- vst(ddsObj, blind=FALSE)
+
+pcaData<- plotPCA(vsd, intgroup=c("dev_stage", "sex", "wing_type"), returnData=TRUE)
+
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+ggplot(pcaData, aes(PC1, PC2, color=dev_stage, shape=sex, alpha =wing_type)) +
+  geom_point(size=3) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed() +
+  scale_color_manual(values = c("L5" = "#1babe2", "36h" = "#f89c30", "48h" = "#b0207c")) +
+  scale_alpha_manual(values = c("HW" = 0.3, "FW" = 1))
 
 #get norm counts from deseq
 counts_ddsObj_for_heatmap <- counts(ddsObj, normalized=TRUE) %>%
