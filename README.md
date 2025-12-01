@@ -1,6 +1,6 @@
 # Skipper_WntA_RNAseq
 <body>  
-This repository contains all code associated with the differential expression analyses performed in the manuscript Alqassar et al. 2025 <a href="https://doi.org/10.1101/2025.09.28.679064"> WntA expression and wing transcriptomics illuminate the evolution of stripe patterns in skipper butterflies </a>. The code found in this repository processes, maps, and performs differential expression analyses on RNA sequencing data generated during the study where we aimed to understand differences in gene expression between wing tissues in skipper butterflies.		
+This repository contains all code associated with the differential expression analyses performed in the manuscript Alqassar et al. 2025 <a href="https://doi.org/10.1242/bio.062297"> WntA expression and wing transcriptomics illuminate the evolution of stripe patterns in skipper butterflies </a>. The code found in this repository processes, maps, and performs differential expression analyses on RNA sequencing data generated during the study where we aimed to understand differences in gene expression between wing tissues in skipper butterflies.		
 <body/>	
 <br><br>	
 <strong>Contact info</strong>: Jasmine Alqassar (j.alqassar@gwu.edu) and Arnaud Martin (arnaud@gwu.edu)
