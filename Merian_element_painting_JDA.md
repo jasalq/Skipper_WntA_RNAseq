@@ -63,7 +63,7 @@ echo "=========================================================="
 ```
 mamba activate buscopaint_JDA
 ./buscopainter.py -r Merian_elements_full_table.tsv -q full_table.tsv
-./plot_buscopainter_editedJA.R -f buscopainter_complete_location.tsv -p "ilAntGemm2" -i Anticarsia_gemmatalis_primary_pseudohap_scaffold.fasta.fai -m TRUE
+./plot_buscopainter_editedJA.R -f buscopainter_complete_location.tsv -p "Ecla" -i e_clarus_purged.fa.fai -m TRUE
 ```
 * If you want only the rearranged Merian elements painted add **-d TRUE**  
 * If you don't have a fasta index file before this use Samtools to make one: 
